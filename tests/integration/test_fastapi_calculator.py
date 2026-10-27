@@ -152,3 +152,49 @@ def test_divide_by_zero_api(client):
     # Assert that the 'error' field contains the correct error message
     assert "Cannot divide by zero!" in response.json()['error'], \
         f"Expected error message 'Cannot divide by zero!', got '{response.json()['error']}'"
+
+
+@pytest.mark.parametrize("endpoint", ["add", "subtract", "multiply", "divide"])
+@pytest.mark.parametrize("payload", [{}, {"a": 1}, {"a": "bad", "b": 2}, {"a": None, "b": 2}, {"a": True, "b": 2}, {"a": "NaN", "b": 2}])
+def test_invalid_requests(client, endpoint, payload):
+    response = client.post(f"/{endpoint}", json=payload)
+    assert response.status_code == 400
+    assert response.json()["error"]
+
+
+def test_homepage(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Calculator" in response.text
+
+
+@pytest.mark.parametrize("endpoint", ["add", "subtract", "multiply", "divide"])
+def test_internal_failure(client, monkeypatch, endpoint, caplog):
+    def fail(*args):
+        raise RuntimeError("private implementation detail")
+    monkeypatch.setattr(f"main.{endpoint}", fail)
+    response = client.post(f"/{endpoint}", json={"a": 10, "b": 2})
+    assert response.status_code == 500
+    assert response.json() == {"error": "Internal Server Error"}
+    assert "private implementation detail" in caplog.text
+
+
+@pytest.mark.parametrize("endpoint,a,b", [("add", 1e308, 1e308), ("subtract", -1e308, 1e308), ("multiply", 1e308, 2), ("divide", 1e308, 1e-308)])
+def test_overflow(client, endpoint, a, b):
+    response = client.post(f"/{endpoint}", json={"a": a, "b": b})
+    assert response.status_code == 400
+    assert response.json() == {"error": "Result must be a finite number."}
+
+
+def test_malformed_json(client):
+    response = client.post("/add", content="{", headers={"Content-Type": "application/json"})
+    assert response.status_code == 400
+    assert "error" in response.json()
+
+
+def test_logs_success_and_validation(client, caplog):
+    client.post("/add", json={"a": 2, "b": 3})
+    client.post("/add", json={})
+    assert "add(2.0, 3.0) = 5.0" in caplog.text
+    assert "ValidationError on /add" in caplog.text

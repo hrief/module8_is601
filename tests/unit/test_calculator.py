@@ -232,3 +232,20 @@ def test_divide_by_zero() -> None:
     # Assert that the exception message contains the expected error message
     assert "Cannot divide by zero!" in str(excinfo.value), \
         f"Expected error message 'Cannot divide by zero!', but got '{excinfo.value}'"
+
+
+@pytest.mark.parametrize("operation,a,b,expected", [(add, 0.1, 0.2, 0.3), (subtract, 0.3, 0.1, 0.2), (multiply, -2, -3, 6), (divide, 1, 3, 1/3)])
+def test_fractional_and_signed_results(operation, a, b, expected):
+    assert operation(a, b) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("operation", [add, subtract, multiply, divide])
+def test_operation_logging(operation, caplog):
+    operation(6, 2)
+    assert operation.__name__ in caplog.text
+
+
+def test_zero_divisor_logging(caplog):
+    with pytest.raises(ValueError, match="Cannot divide by zero"):
+        divide(1, -0.0)
+    assert "Division by zero" in caplog.text

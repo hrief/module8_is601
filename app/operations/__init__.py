@@ -18,7 +18,20 @@ These functions can be imported and used in other modules or integrated into API
 to perform arithmetic operations based on user input.
 """
 
-from typing import Union  # Import Union for type hinting multiple possible types
+import logging
+import math
+from typing import Union
+
+logger = logging.getLogger(__name__)
+
+def checked_result(operation, a, b, result):
+    """Reject overflow before a result reaches JSON serialization."""
+    if not math.isfinite(result):
+        logger.warning("%s produced a non-finite result", operation)
+        raise ValueError("Result must be a finite number.")
+    logger.info("%s(%s, %s) = %s", operation, a, b, result)
+    return result
+
 
 # Define a type alias for numbers that can be either int or float
 Number = Union[int, float]
@@ -42,7 +55,7 @@ def add(a: Number, b: Number) -> Number:
     """
     # Perform addition of a and b
     result = a + b
-    return result
+    return checked_result("add", a, b, result)
 
 def subtract(a: Number, b: Number) -> Number:
     """
@@ -63,7 +76,7 @@ def subtract(a: Number, b: Number) -> Number:
     """
     # Perform subtraction of b from a
     result = a - b
-    return result
+    return checked_result("subtract", a, b, result)
 
 def multiply(a: Number, b: Number) -> Number:
     """
@@ -84,7 +97,7 @@ def multiply(a: Number, b: Number) -> Number:
     """
     # Perform multiplication of a and b
     result = a * b
-    return result
+    return checked_result("multiply", a, b, result)
 
 def divide(a: Number, b: Number) -> float:
     """
@@ -113,8 +126,9 @@ def divide(a: Number, b: Number) -> float:
     # Check if the divisor is zero to prevent division by zero
     if b == 0:
         # Raise a ValueError with a descriptive message
+        logger.warning("Division by zero: a=%s b=%s", a, b)
         raise ValueError("Cannot divide by zero!")
     
     # Perform division of a by b and return the result as a float
     result = a / b
-    return result
+    return checked_result("divide", a, b, result)

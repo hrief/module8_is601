@@ -3,30 +3,33 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field, field_validator  # Use @validator for Pydantic 1.x
+from pydantic import BaseModel, Field, field_validator
 from fastapi.exceptions import RequestValidationError
-from app.operations import add, subtract, multiply, divide  # Ensure correct import path
+from app.operations import add, subtract, multiply, divide
 import uvicorn
 import logging
+import math
+from pathlib import Path
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
 # Setup templates directory
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # Pydantic model for request data
 class OperationRequest(BaseModel):
     a: float = Field(..., description="The first number")
     b: float = Field(..., description="The second number")
 
-    @field_validator('a', 'b')  # Correct decorator for Pydantic 1.x
+    @field_validator('a', 'b', mode='before')
+    @classmethod
     def validate_numbers(cls, value):
-        if not isinstance(value, (int, float)):
-            raise ValueError('Both a and b must be numbers.')
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError('Both a and b must be finite numbers.')
         return value
 
 # Pydantic model for successful response
@@ -61,7 +64,8 @@ async def read_root(request: Request):
     """
     Serve the index.html template.
     """
-    return templates.TemplateResponse("index.html", {"request": request})
+    logger.info("Serving calculator homepage")
+    return templates.TemplateResponse(request=request, name="index.html")
 
 @app.post("/add", response_model=OperationResponse, responses={400: {"model": ErrorResponse}})
 async def add_route(operation: OperationRequest):
@@ -71,9 +75,11 @@ async def add_route(operation: OperationRequest):
     try:
         result = add(operation.a, operation.b)
         return OperationResponse(result=result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Add Operation Error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("Add operation failed")
+        raise HTTPException(status_code=500, detail="Internal Server Error") from e
 
 @app.post("/subtract", response_model=OperationResponse, responses={400: {"model": ErrorResponse}})
 async def subtract_route(operation: OperationRequest):
@@ -83,9 +89,11 @@ async def subtract_route(operation: OperationRequest):
     try:
         result = subtract(operation.a, operation.b)
         return OperationResponse(result=result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Subtract Operation Error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("Subtract operation failed")
+        raise HTTPException(status_code=500, detail="Internal Server Error") from e
 
 @app.post("/multiply", response_model=OperationResponse, responses={400: {"model": ErrorResponse}})
 async def multiply_route(operation: OperationRequest):
@@ -95,9 +103,11 @@ async def multiply_route(operation: OperationRequest):
     try:
         result = multiply(operation.a, operation.b)
         return OperationResponse(result=result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Multiply Operation Error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("Multiply operation failed")
+        raise HTTPException(status_code=500, detail="Internal Server Error") from e
 
 @app.post("/divide", response_model=OperationResponse, responses={400: {"model": ErrorResponse}})
 async def divide_route(operation: OperationRequest):
@@ -111,7 +121,7 @@ async def divide_route(operation: OperationRequest):
         logger.error(f"Divide Operation Error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Divide Operation Internal Error: {str(e)}")
+        logger.exception("Divide operation failed")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 if __name__ == "__main__":
